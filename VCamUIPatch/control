@@ -1,0 +1,10 @@
+Package: com.ck.vcamv3.uipatch
+Name: vcam-v3 UI补丁·双体悬浮舱
+Description: 控制终端UI面板 | 双体悬浮舱布局 | 图标化按键 | 三态悬浮球(摄像机/发光球/狮子头)。补丁方式注入, 不改原逻辑/状态。
+Maintainer: cK
+Author: cK
+Section: Tweaks
+Depends: mobilesubstrate
+Architecture: iphoneos-arm64
+Version: 1.0.0
+Installed-Size: 160
