@@ -422,23 +422,23 @@ static void VPBuildPanel(UIViewController *vc) {
 
     CGFloat W = root.bounds.size.width;
     CGFloat H = root.bounds.size.height;
-    // 屏幕占比等比: 以 390 基准宽缩放 (任意机型均合理占比)
-    CGFloat S = W / 390.0;
+    // 双维等比缩放: 基准 390x844, 取小值 (小屏自动压缩, 面板不超屏)
+    CGFloat K = MIN(W / 390.0, H / 844.0);
 
     // --- 标题胶囊 ---
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake((W - 238 * S) / 2, 58 * S, 238 * S, 36 * S)];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake((W - 200 * K) / 2, 46 * K, 200 * K, 30 * K)];
     title.text = @"控制终端UI面板";
-    title.font = [UIFont boldSystemFontOfSize:15 * S];
+    title.font = [UIFont boldSystemFontOfSize:13 * K];
     title.textColor = [UIColor whiteColor];
     title.textAlignment = NSTextAlignmentCenter;
-    title.layer.cornerRadius = 18 * S;
+    title.layer.cornerRadius = 15 * K;
     title.layer.borderWidth = 1.5;
     title.layer.borderColor = VPColorGreen().CGColor;
     title.backgroundColor = [UIColor colorWithRed:0.24 green:1.0 blue:0.62 alpha:0.15];
     [root addSubview:title];
 
     // --- 舱间光柱 ---
-    UIView *beam = [[UIView alloc] initWithFrame:CGRectMake(220 * S, 216 * S, 6 * S, 144 * S)];
+    UIView *beam = [[UIView alloc] initWithFrame:CGRectMake(W / 2 + 19 * K, 172 * K, 6 * K, 118 * K)];
     beam.layer.cornerRadius = 3 * S;
     beam.backgroundColor = VPColorGreen();
     beam.alpha = 0.85;
@@ -449,33 +449,33 @@ static void VPBuildPanel(UIViewController *vc) {
     [beam.layer addAnimation:bp forKey:@"vpBeam"];
 
     // --- 左主控舱 ---
-    UIView *podL = [[UIView alloc] initWithFrame:CGRectMake(14 * S, 108 * S, 204 * S, 360 * S)];
-    podL.layer.cornerRadius = 28 * S;
+    UIView *podL = [[UIView alloc] initWithFrame:CGRectMake(12 * K, 88 * K, 168 * K, 296 * K)];
+    podL.layer.cornerRadius = 22 * K;
     podL.layer.borderWidth = 1.5;
     podL.layer.borderColor = VPColorGreen().CGColor;
     podL.backgroundColor = VPColorGlass();
     podL.layer.shadowColor = [UIColor blackColor].CGColor;
     podL.layer.shadowOpacity = 0.4f;
-    podL.layer.shadowOffset = CGSizeMake(0, 14 * S);
-    podL.layer.shadowRadius = 40 * S;
+    podL.layer.shadowOffset = CGSizeMake(0, 12 * K);
+    podL.layer.shadowRadius = 32 * K;
     // 毛玻璃层 (透明要求)
     UIVisualEffectView *blurL = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
     blurL.frame = podL.bounds;
-    blurL.layer.cornerRadius = 28 * S;
+    blurL.layer.cornerRadius = 22 * K;
     blurL.layer.masksToBounds = YES;
     [podL addSubview:blurL];
     [root addSubview:podL];
 
     // 舱标题
-    UILabel *podTitle = [[UILabel alloc] initWithFrame:CGRectMake(16 * S, 18 * S, 120 * S, 14 * S)];
+    UILabel *podTitle = [[UILabel alloc] initWithFrame:CGRectMake(14 * K, 12 * K, 100 * K, 12 * K)];
     podTitle.text = @"主控舱";
-    podTitle.font = [UIFont boldSystemFontOfSize:10 * S];
+    podTitle.font = [UIFont boldSystemFontOfSize:9 * K];
     podTitle.textColor = VPColorGreen();
     [podL addSubview:podTitle];
 
     // 2x2 图标键 (媒体/状态/恢复相机/悬浮球)
-    CGFloat bw = (204 * S - 32 * S - 12 * S) / 2;
-    CGFloat bh = 100 * S;
+    CGFloat bw = (168 * K - 28 * K - 10 * K) / 2;
+    CGFloat bh = 80 * K;
     struct { SEL action; UIColor *color; UIImage *(*icon)(UIColor *); } keys[4] = {
         { @selector(switchVideoTapped),      VPColorGreen(), VPFilmIcon },
         { @selector(toggleReplacementTapped), VPColorBlue(),  VPEyeIcon },
@@ -484,132 +484,129 @@ static void VPBuildPanel(UIViewController *vc) {
     };
     for (int i = 0; i < 4; i++) {
         int col = i % 2, row = i / 2;
-        CGRect f = CGRectMake(16 * S + col * (bw + 12 * S), 44 * S + row * (bh + 12 * S), bw, bh);
+        CGRect f = CGRectMake(14 * K + col * (bw + 10 * K), 32 * K + row * (bh + 10 * K), bw, bh);
         VPButton *b = [VPButton buttonWithType:UIButtonTypeCustom];
         b.frame = f;
-        b.layer.cornerRadius = 20 * S;
+        b.layer.cornerRadius = 16 * K;
         b.backgroundColor = keys[i].color;
         b.layer.borderWidth = 1.5;
         b.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.4].CGColor;
         [b setImage:keys[i].icon([UIColor whiteColor]) forState:UIControlStateNormal];
         b.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        b.imageEdgeInsets = UIEdgeInsetsMake(14 * S, 14 * S, 14 * S, 14 * S);
+        b.imageEdgeInsets = UIEdgeInsetsMake(11 * K, 11 * K, 11 * K, 11 * K);
         // 逻辑不变: 回调仍走原 SEL
         [b addTarget:vc action:keys[i].action forControlEvents:UIControlEventTouchUpInside];
         [podL addSubview:b];
     }
 
     // 迷你 RTMP: 开关 + 输入 (镜像到原控件后走原方法)
-    UISwitch *miniSw = [[UISwitch alloc] initWithFrame:CGRectMake(16 * S, 268 * S, 51 * S, 31 * S)];
+    UISwitch *miniSw = [[UISwitch alloc] initWithFrame:CGRectMake(14 * K, 216 * K, 51 * K, 31 * K)];
     miniSw.onTintColor = VPColorGreen();
-    miniSw.transform = CGAffineTransformMakeScale(S, S);
+    miniSw.transform = CGAffineTransformMakeScale(K, K);
     [miniSw addTarget:vc action:@selector(vpMiniSwitchChanged:) forControlEvents:UIControlEventValueChanged];
     [podL addSubview:miniSw];
 
-    UITextField *miniTf = [[UITextField alloc] initWithFrame:CGRectMake(80 * S, 272 * S, 108 * S, 24 * S)];
+    UITextField *miniTf = [[UITextField alloc] initWithFrame:CGRectMake(72 * K, 220 * K, 84 * K, 22 * K)];
     miniTf.tag = VP_TAG_BALLLABEL + 10; // 复用信号区无冲突: 独立标签
-    miniTf.font = [UIFont systemFontOfSize:9 * S];
+    miniTf.font = [UIFont systemFontOfSize:8 * K];
     miniTf.textColor = [UIColor colorWithRed:0.81 green:0.88 blue:1 alpha:1];
     miniTf.backgroundColor = [UIColor colorWithRed:0.24 green:0.48 blue:1 alpha:0.15];
-    miniTf.layer.cornerRadius = 8 * S;
+    miniTf.layer.cornerRadius = 6 * K;
     miniTf.layer.borderWidth = 1;
     miniTf.layer.borderColor = VPColorBlue().CGColor;
     miniTf.keyboardType = UIKeyboardTypeURL;
     miniTf.autocapitalizationType = UITextAutocapitalizationTypeNone;
     miniTf.returnKeyType = UIReturnKeyDone;
-    miniTf.placeholder = @"rtmp://...";
     miniTf.attributedPlaceholder = [[NSAttributedString alloc] initWithString:@"rtmp://..." attributes:@{NSForegroundColorAttributeName: [UIColor colorWithWhite:1 alpha:0.35]}];
     [miniTf addTarget:vc action:@selector(vpMiniTfEnd:) forControlEvents:UIControlEventEditingDidEnd];
     [miniTf addTarget:vc action:@selector(vpMiniTfEnd:) forControlEvents:UIControlEventEditingDidEndOnExit];
     [podL addSubview:miniTf];
 
     // --- 右状态舱 ---
-    UIView *podR = [[UIView alloc] initWithFrame:CGRectMake(W - 14 * S - 150 * S, 108 * S, 150 * S, 360 * S)];
-    podR.layer.cornerRadius = 75 * S;
-    podR.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
-    podR.layer.cornerRadius = 26 * S;
+    UIView *podR = [[UIView alloc] initWithFrame:CGRectMake(W - 12 * K - 124 * K, 88 * K, 124 * K, 296 * K)];
+    podR.layer.cornerRadius = 22 * K;
     podR.layer.borderWidth = 1.5;
     podR.layer.borderColor = VPColorBlue().CGColor;
     podR.backgroundColor = VPColorGlass();
     podR.layer.shadowColor = [UIColor blackColor].CGColor;
     podR.layer.shadowOpacity = 0.4f;
-    podR.layer.shadowOffset = CGSizeMake(0, 14 * S);
-    podR.layer.shadowRadius = 40 * S;
+    podR.layer.shadowOffset = CGSizeMake(0, 12 * K);
+    podR.layer.shadowRadius = 32 * K;
     UIVisualEffectView *blurR = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleDark]];
     blurR.frame = podR.bounds;
-    blurR.layer.cornerRadius = 26 * S;
+    blurR.layer.cornerRadius = 22 * K;
     blurR.layer.masksToBounds = YES;
     [podR addSubview:blurR];
     [root addSubview:podR];
 
-    UILabel *podTitleR = [[UILabel alloc] initWithFrame:CGRectMake(0, 20 * S, 150 * S, 14 * S)];
+    UILabel *podTitleR = [[UILabel alloc] initWithFrame:CGRectMake(0, 14 * K, 124 * K, 12 * K)];
     podTitleR.text = @"状态";
-    podTitleR.font = [UIFont boldSystemFontOfSize:10 * S];
+    podTitleR.font = [UIFont boldSystemFontOfSize:9 * K];
     podTitleR.textColor = VPColorBlue();
     podTitleR.textAlignment = NSTextAlignmentCenter;
     [podR addSubview:podTitleR];
 
     // 眼瞳 (状态主视觉)
-    UIView *eye = [[UIView alloc] initWithFrame:CGRectMake((150 * S - 84 * S) / 2, 44 * S, 84 * S, 84 * S)];
-    eye.layer.cornerRadius = 42 * S;
+    UIView *eye = [[UIView alloc] initWithFrame:CGRectMake((124 * K - 68 * K) / 2, 32 * K, 68 * K, 68 * K)];
+    eye.layer.cornerRadius = 34 * K;
     eye.backgroundColor = VPColorBlue();
     eye.layer.borderWidth = 2;
     eye.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.7].CGColor;
     eye.layer.shadowColor = VPColorBlue().CGColor;
     eye.layer.shadowOpacity = 0.9f;
-    eye.layer.shadowRadius = 20 * S;
+    eye.layer.shadowRadius = 16 * K;
     [podR addSubview:eye];
-    UIImageView *eyeIv = [[UIImageView alloc] initWithFrame:CGRectInset(eye.bounds, 20 * S, 20 * S)];
+    UIImageView *eyeIv = [[UIImageView alloc] initWithFrame:CGRectInset(eye.bounds, 14 * K, 14 * K)];
     eyeIv.image = VPEyeIcon([UIColor whiteColor]);
     eyeIv.contentMode = UIViewContentModeScaleAspectFit;
     [eye addSubview:eyeIv];
 
     // 状态徽章
-    UILabel *badge = [[UILabel alloc] initWithFrame:CGRectMake((150 * S - 60 * S) / 2, 140 * S, 60 * S, 20 * S)];
+    UILabel *badge = [[UILabel alloc] initWithFrame:CGRectMake((124 * K - 52 * K) / 2, 108 * K, 52 * K, 18 * K)];
     badge.tag = VP_TAG_BADGE;
-    badge.font = [UIFont boldSystemFontOfSize:11 * S];
+    badge.font = [UIFont boldSystemFontOfSize:10 * K];
     badge.textColor = [UIColor colorWithWhite:0.06 alpha:1];
     badge.textAlignment = NSTextAlignmentCenter;
-    badge.layer.cornerRadius = 10 * S;
+    badge.layer.cornerRadius = 9 * K;
     badge.layer.masksToBounds = YES;
     [podR addSubview:badge];
 
     // RTMP 迷你开关
-    UILabel *rtmpLab = [[UILabel alloc] initWithFrame:CGRectMake(0, 176 * S, 150 * S, 12 * S)];
+    UILabel *rtmpLab = [[UILabel alloc] initWithFrame:CGRectMake(0, 134 * K, 124 * K, 10 * K)];
     rtmpLab.text = @"RTMP";
-    rtmpLab.font = [UIFont systemFontOfSize:9 * S];
+    rtmpLab.font = [UIFont systemFontOfSize:8 * K];
     rtmpLab.textColor = VPColorGreen();
     rtmpLab.textAlignment = NSTextAlignmentCenter;
     [podR addSubview:rtmpLab];
-    UISwitch *rtmpSw = [[UISwitch alloc] initWithFrame:CGRectMake((150 * S - 51 * S) / 2, 194 * S, 51 * S, 31 * S)];
+    UISwitch *rtmpSw = [[UISwitch alloc] initWithFrame:CGRectMake((124 * K - 51 * K) / 2, 148 * K, 51 * K, 31 * K)];
     rtmpSw.onTintColor = VPColorBlue();
-    rtmpSw.transform = CGAffineTransformMakeScale(S, S);
+    rtmpSw.transform = CGAffineTransformMakeScale(K, K);
     [rtmpSw addTarget:vc action:@selector(vpRtmpSwitchChanged:) forControlEvents:UIControlEventValueChanged];
     [podR addSubview:rtmpSw];
 
     // --- 底部双键: 教程 / 关闭 ---
-    CGFloat footY = 486 * S;
-    CGFloat footH = 56 * S;
-    CGFloat footW = (W - 28 * S - 14 * S) / 2;
+    CGFloat footY = 402 * K;
+    CGFloat footH = 44 * K;
+    CGFloat footW = (W - 24 * K - 12 * K) / 2;
     VPButton *tut = [VPButton buttonWithType:UIButtonTypeCustom];
-    tut.frame = CGRectMake(14 * S, footY, footW, footH);
-    tut.layer.cornerRadius = 20 * S;
+    tut.frame = CGRectMake(12 * K, footY, footW, footH);
+    tut.layer.cornerRadius = 16 * K;
     tut.backgroundColor = VPColorBlue();
     tut.layer.borderWidth = 1.5;
     tut.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.4].CGColor;
     [tut setImage:VPBookIcon([UIColor whiteColor]) forState:UIControlStateNormal];
-    tut.imageEdgeInsets = UIEdgeInsetsMake(14 * S, 14 * S, 14 * S, 14 * S);
+    tut.imageEdgeInsets = UIEdgeInsetsMake(11 * K, 11 * K, 11 * K, 11 * K);
     [tut addTarget:vc action:@selector(openTutorial) forControlEvents:UIControlEventTouchUpInside];
     [root addSubview:tut];
 
     VPButton *close = [VPButton buttonWithType:UIButtonTypeCustom];
-    close.frame = CGRectMake(14 * S + footW + 14 * S, footY, footW, footH);
-    close.layer.cornerRadius = 20 * S;
+    close.frame = CGRectMake(12 * K + footW + 12 * K, footY, footW, footH);
+    close.layer.cornerRadius = 16 * K;
     close.backgroundColor = VPColorPink();
     close.layer.borderWidth = 1.5;
     close.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.4].CGColor;
     [close setImage:VPXIcon([UIColor whiteColor]) forState:UIControlStateNormal];
-    close.imageEdgeInsets = UIEdgeInsetsMake(14 * S, 14 * S, 14 * S, 14 * S);
+    close.imageEdgeInsets = UIEdgeInsetsMake(11 * K, 11 * K, 11 * K, 11 * K);
     [close addTarget:vc action:@selector(dismissPanel) forControlEvents:UIControlEventTouchUpInside];
     [root addSubview:close];
 
@@ -634,9 +631,11 @@ static void VPUpdateStatusLabel(id self, SEL _cmd) {
     Ivar iv = class_getInstanceVariable(object_getClass(self), "_statusLabel");
     UILabel *sl = iv ? object_getIvar(self, iv) : nil;
     if (sl && sl.text) VPSetBadge(((UIViewController *)self).view, sl.text);
-    // 同步悬浮球 (替换状态文本含 ON/OFF)
-    UIView *ball = [[UIApplication sharedApplication].windows.firstObject viewWithTag:VP_TAG_BALLIMG];
-    if (ball) VPUpdateBall(ball.superview);
+    // 同步悬浮球 (替换状态文本含 ON/OFF) — 遍历所有窗口 (球可能在独立悬浮窗)
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        UIView *iv = [w viewWithTag:VP_TAG_BALLIMG];
+        if (iv) { VPUpdateBall(iv.superview); break; }
+    }
 }
 
 // ---------------------------------------------------------------
@@ -651,8 +650,15 @@ static UIViewController *VPTopmostPresentingVC(void) {
         return a.windowLevel > b.windowLevel ? NSOrderedAscending : NSOrderedDescending;
     }];
     for (UIWindow *w in sorted) {
-        if (w.hidden || !w.rootViewController) continue;
-        UIViewController *top = w.rootViewController;
+        // 只接受主层级窗口 (level 0): 悬浮窗/状态栏窗一律跳过,
+        // 防止选择器/弹窗落入小窗或非键窗 → 隐形全屏遮挡导致"卡死"
+        if (w.hidden || w.windowLevel != 0) continue;
+        UIViewController *root = w.rootViewController;
+        if (!root) continue;
+        // vcam 自有窗口根 (响应 toggleFloatingBall) 与面板 VC 自身都跳过
+        if ([root isKindOfClass:NSClassFromString(@"VCamSettingsViewController")]) continue;
+        if ([root respondsToSelector:@selector(toggleFloatingBall)]) continue;
+        UIViewController *top = root;
         while (top.presentedViewController) top = top.presentedViewController;
         return top;
     }
@@ -670,12 +676,25 @@ static void VPSwitchVideo(id self, SEL _cmd) {
     if (host) [host presentViewController:picker animated:YES completion:nil];
 }
 
-// 关闭: 面板 VC 处于正规 presented 层级 → 原样 dismiss; 否则直接摘除视图
+// 关闭: 正规 presented 层级 → 原样 dismiss; 否则整窗隐藏 (独立面板窗)
+// 或仅摘面板视图 (悬浮球同窗时, 避免连球一起消失)
 static void (*origDismissPanel)(id, SEL) = NULL;
 static void VPDismissPanel(id self, SEL _cmd) {
     UIViewController *vc = (UIViewController *)self;
-    if (!vc.presentingViewController && vc.view.superview) {
-        [vc.view removeFromSuperview];
+    if (vc.presentingViewController) {
+        if (origDismissPanel) origDismissPanel(self, _cmd);
+        return;
+    }
+    UIWindow *win = vc.view.window;
+    if (win) {
+        // 清理本窗残留 presented (选择器/弹窗), 防隐形遮挡
+        [vc dismissViewControllerAnimated:NO completion:nil];
+        if ([win viewWithTag:VP_TAG_BALLIMG]) {
+            [vc.view removeFromSuperview];
+            return;
+        }
+        // 独立面板窗 → 整窗隐藏, 彻底解除遮挡
+        win.hidden = YES;
         return;
     }
     if (origDismissPanel) origDismissPanel(self, _cmd);
