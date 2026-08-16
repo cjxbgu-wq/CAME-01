@@ -277,49 +277,49 @@ static void VPUpdateBall(UIView *ball) {
 }
 
 // ---------------------------------------------------------------
-// 悬浮球: 初始化后重绘 (狮子头/发光球/摄像机三态 + 呼吸光环)
+// 悬浮球加工 (幂等): 金底+三态图标+呼吸光环+摄像机角标
+// 标签尚未创建时返回, 由 setText: 迟到路径补装
 // ---------------------------------------------------------------
-static void (*origFloatingBallInit)(id, SEL, CGRect) = NULL;
-static void VPFloatingBallInit(id self, SEL _cmd, CGRect frame) {
-    origFloatingBallInit(self, _cmd, frame);
-    // 仅当标签存在(VCamFloatingBall 已建立)才加工; 幂等: 已处理过则跳过
+static void VPBallEnsureStyled(UIView *ball) {
+    // 已加工过 (有图标) 则跳过
+    if ([ball viewWithTag:VP_TAG_BALLIMG]) return;
     UIView *label = nil;
-    for (UIView *v in ((UIView *)self).subviews) {
+    for (UIView *v in ball.subviews) {
         if ([v isKindOfClass:[UILabel class]]) { label = v; break; }
     }
-    if (!label || [self viewWithTag:VP_TAG_BALLIMG]) return;
+    if (!label) return;
     label.tag = VP_TAG_BALLLABEL;
     label.hidden = YES; // 隐藏原文字, 仅保留 setText: 信号
 
     // 金底 + 辉光
-    ((UIView *)self).backgroundColor = [UIColor colorWithRed:1.0 green:0.60 blue:0.18 alpha:1];
-    ((UIView *)self).layer.shadowColor = VPColorGold().CGColor;
-    ((UIView *)self).layer.shadowOpacity = 0.9f;
-    ((UIView *)self).layer.shadowRadius = 10.0f;
-    ((UIView *)self).layer.shadowOffset = CGSizeZero;
+    ball.backgroundColor = [UIColor colorWithRed:1.0 green:0.60 blue:0.18 alpha:1];
+    ball.layer.shadowColor = VPColorGold().CGColor;
+    ball.layer.shadowOpacity = 0.9f;
+    ball.layer.shadowRadius = 10.0f;
+    ball.layer.shadowOffset = CGSizeZero;
 
     // 图标视图
-    UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectInset(((UIView *)self).bounds, ((UIView *)self).bounds.size.width * 0.14, ((UIView *)self).bounds.size.width * 0.14)];
+    UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectInset(ball.bounds, ball.bounds.size.width * 0.14, ball.bounds.size.width * 0.14)];
     iv.tag = VP_TAG_BALLIMG;
     iv.contentMode = UIViewContentModeScaleAspectFit;
     iv.image = VPBallImageForText(((UILabel *)label).text);
-    [(UIView *)self addSubview:iv];
+    [ball addSubview:iv];
 
     // 呼吸光环 (绿色, 持续透明度脉冲)
-    UIView *ring = [[UIView alloc] initWithFrame:CGRectInset(((UIView *)self).bounds, -9, -9)];
+    UIView *ring = [[UIView alloc] initWithFrame:CGRectInset(ball.bounds, -9, -9)];
     ring.tag = VP_TAG_BALLRING;
     ring.layer.cornerRadius = ring.bounds.size.width / 2.0;
     ring.layer.borderWidth = 2.0;
     ring.layer.borderColor = VPColorGreen().CGColor;
     ring.userInteractionEnabled = NO;
-    [(UIView *)self addSubview:ring];
+    [ball addSubview:ring];
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
     pulse.fromValue = @0.9; pulse.toValue = @0.25;
     pulse.duration = 1.6; pulse.autoreverses = YES; pulse.repeatCount = INFINITY;
     [ring.layer addAnimation:pulse forKey:@"vpPulse"];
 
     // 摄像机角标 (右下)
-    UIImageView *badge = [[UIImageView alloc] initWithFrame:CGRectMake(((UIView *)self).bounds.size.width - 26, ((UIView *)self).bounds.size.height - 26, 26, 26)];
+    UIImageView *badge = [[UIImageView alloc] initWithFrame:CGRectMake(ball.bounds.size.width - 26, ball.bounds.size.height - 26, 26, 26)];
     badge.image = VPCameraIcon(VPColorGreen());
     badge.backgroundColor = [UIColor colorWithWhite:0.11 alpha:0.9];
     badge.layer.cornerRadius = 13;
@@ -327,19 +327,78 @@ static void VPFloatingBallInit(id self, SEL _cmd, CGRect frame) {
     badge.layer.borderColor = VPColorGreen().CGColor;
     badge.contentMode = UIViewContentModeScaleAspectFit;
     badge.userInteractionEnabled = NO;
-    [(UIView *)self addSubview:badge];
+    [ball addSubview:badge];
 }
 
 // ---------------------------------------------------------------
-// 全局 UILabel setText: 交换 — 仅响应本补丁标记的悬浮球标签
+// 悬浮球: 初始化后重绘 (标签未建时留给 setText: 迟到路径)
+// ---------------------------------------------------------------
+static void (*origFloatingBallInit)(id, SEL, CGRect) = NULL;
+static void VPFloatingBallInit(id self, SEL _cmd, CGRect frame) {
+    origFloatingBallInit(self, _cmd, frame);
+    VPBallEnsureStyled((UIView *)self);
+}
+
+// ---------------------------------------------------------------
+// 全局 UILabel setText: 交换
+//  1) TG 链接文本 (t.me / taokk3) → 置空并隐藏 (不展示)
+//  2) 悬浮球标签 (无论何时创建/赋值) → 标记+隐藏+三态刷新
 // ---------------------------------------------------------------
 static void (*origLabelSetText)(id, SEL, NSString *) = NULL;
 static void VPLabelSetText(id self, SEL _cmd, NSString *text) {
-    origLabelSetText(self, _cmd, text);
-    if (((UIView *)self).tag == VP_TAG_BALLLABEL) {
-        UIView *ball = ((UIView *)self).superview;
-        if (ball) VPUpdateBall(ball);
+    UIView *v = (UIView *)self;
+    // 1) TG 链接过滤
+    if (text.length) {
+        NSString *low = [text lowercaseString];
+        if ([low rangeOfString:@"taokk3"].location != NSNotFound ||
+            [low rangeOfString:@"t.me"].location != NSNotFound) {
+            origLabelSetText(self, _cmd, @"");
+            v.hidden = YES;
+            return;
+        }
     }
+    origLabelSetText(self, _cmd, text);
+    // 2) 悬浮球标签: 迟到创建/赋值也能捕获
+    UIView *ball = nil;
+    if (v.tag == VP_TAG_BALLLABEL) {
+        ball = v.superview;
+    } else if ([v.superview isKindOfClass:NSClassFromString(@"VCamFloatingBall")]) {
+        v.tag = VP_TAG_BALLLABEL;
+        v.hidden = YES;
+        ball = v.superview;
+    }
+    if (ball) {
+        VPBallEnsureStyled(ball);
+        if ([ball viewWithTag:VP_TAG_BALLIMG]) VPUpdateBall(ball);
+    }
+}
+
+// ---------------------------------------------------------------
+// 跳转拦截: TG 链接 (t.me / taokk3) 一律丢弃 — 按钮保留但点击无反应
+// ---------------------------------------------------------------
+static BOOL (*origOpenURL)(id, SEL, NSURL *, NSDictionary *, id) = NULL;
+static BOOL VPOpenURL(id self, SEL _cmd, NSURL *url, NSDictionary *options, id completion) {
+    if (url) {
+        NSString *u = [[url absoluteString] lowercaseString];
+        if ([u rangeOfString:@"taokk3"].location != NSNotFound ||
+            [u rangeOfString:@"t.me"].location != NSNotFound) {
+            if (completion) ((void (^)(BOOL))completion)(NO);
+            return NO;
+        }
+    }
+    return origOpenURL(self, _cmd, url, options, completion);
+}
+
+static BOOL (*origOpenURLLegacy)(id, SEL, NSURL *) = NULL;
+static BOOL VPOpenURLLegacy(id self, SEL _cmd, NSURL *url) {
+    if (url) {
+        NSString *u = [[url absoluteString] lowercaseString];
+        if ([u rangeOfString:@"taokk3"].location != NSNotFound ||
+            [u rangeOfString:@"t.me"].location != NSNotFound) {
+            return NO;
+        }
+    }
+    return origOpenURLLegacy(self, _cmd, url);
 }
 
 // ---------------------------------------------------------------
@@ -580,13 +639,60 @@ static void VPUpdateStatusLabel(id self, SEL _cmd) {
     if (ball) VPUpdateBall(ball.superview);
 }
 
+// ---------------------------------------------------------------
+// 呈现宿主修复: 面板 VC 挂载于自定义悬浮窗 (非窗口控制器层级),
+// iOS 16+ 从其 self 上 present 会被系统丢弃 (view is not in the
+// window hierarchy) → 选择器/弹窗改为从最高层可见窗口的顶层 VC
+// 呈现; 委托/回调仍由面板 VC 处理, 内容与原件完全一致。
+// ---------------------------------------------------------------
+static UIViewController *VPTopmostPresentingVC(void) {
+    NSArray *wins = [[UIApplication sharedApplication] windows];
+    NSArray *sorted = [wins sortedArrayUsingComparator:^NSComparisonResult(UIWindow *a, UIWindow *b) {
+        return a.windowLevel > b.windowLevel ? NSOrderedAscending : NSOrderedDescending;
+    }];
+    for (UIWindow *w in sorted) {
+        if (w.hidden || !w.rootViewController) continue;
+        UIViewController *top = w.rootViewController;
+        while (top.presentedViewController) top = top.presentedViewController;
+        return top;
+    }
+    return nil;
+}
+
+// 切换视频: 与原件同构 (同款选择器/类型/委托), 仅呈现宿主改为顶层 VC
+static void (*origSwitchVideo)(id, SEL) = NULL;
+static void VPSwitchVideo(id self, SEL _cmd) {
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.mediaTypes = @[@"public.image", @"public.movie"];
+    picker.delegate = self; // 选片回调仍走面板 VC 的原方法
+    UIViewController *host = VPTopmostPresentingVC();
+    if (host) [host presentViewController:picker animated:YES completion:nil];
+}
+
+// 关闭: 面板 VC 处于正规 presented 层级 → 原样 dismiss; 否则直接摘除视图
+static void (*origDismissPanel)(id, SEL) = NULL;
+static void VPDismissPanel(id self, SEL _cmd) {
+    UIViewController *vc = (UIViewController *)self;
+    if (!vc.presentingViewController && vc.view.superview) {
+        [vc.view removeFromSuperview];
+        return;
+    }
+    if (origDismissPanel) origDismissPanel(self, _cmd);
+}
+
+// 弹窗 (教程/提示): 同因修复 — 从顶层 VC 呈现, 标题统一品牌
 static void (*origShowAlert)(id, SEL, NSString *) = NULL;
 static void VPShowAlert(id self, SEL _cmd, NSString *msg) {
-    origShowAlert(self, _cmd, msg);
-    // 弹窗标题 "VCam" -> 统一品牌
-    UIViewController *vc = (UIViewController *)self;
-    if ([vc.presentedViewController isKindOfClass:[UIAlertController class]]) {
-        ((UIAlertController *)vc.presentedViewController).title = @"控制终端UI面板";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"控制终端UI面板"
+                                                                   message:msg
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    UIViewController *host = VPTopmostPresentingVC();
+    if (host) {
+        [host presentViewController:alert animated:YES completion:nil];
+    } else if (origShowAlert) {
+        origShowAlert(self, _cmd, msg);
     }
 }
 
@@ -657,8 +763,13 @@ static void VPInstallSwizzles(void) {
     VPSwizzle(settings, @selector(viewDidLoad), (IMP)VPViewDidLoad, (IMP *)&origViewDidLoad);
     VPSwizzle(settings, @selector(updateStatusLabel), (IMP)VPUpdateStatusLabel, (IMP *)&origUpdateStatusLabel);
     VPSwizzle(settings, @selector(showAlertWithMessage:), (IMP)VPShowAlert, (IMP *)&origShowAlert);
+    VPSwizzle(settings, @selector(switchVideoTapped), (IMP)VPSwitchVideo, (IMP *)&origSwitchVideo);
+    VPSwizzle(settings, @selector(dismissPanel), (IMP)VPDismissPanel, (IMP *)&origDismissPanel);
     VPSwizzle(ball, @selector(initWithFrame:), (IMP)VPFloatingBallInit, (IMP *)&origFloatingBallInit);
     VPSwizzle([UILabel class], @selector(setText:), (IMP)VPLabelSetText, (IMP *)&origLabelSetText);
+    // TG 跳转拦截: 按钮保留, 点击无反应
+    VPSwizzle([UIApplication class], @selector(openURL:options:completionHandler:), (IMP)VPOpenURL, (IMP *)&origOpenURL);
+    VPSwizzle([UIApplication class], @selector(openURL:), (IMP)VPOpenURLLegacy, (IMP *)&origOpenURLLegacy);
 
     // 附加 RTMP 镜像动作 (仅本补丁的开关/输入框使用)
     class_addMethod(settings, @selector(vpMiniSwitchChanged:), (IMP)vpMiniSwitchChanged, "v@:@");
