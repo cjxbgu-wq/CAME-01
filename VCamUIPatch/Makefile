@@ -7,10 +7,10 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = VCamUIPatch
 
 VCamUIPatch_FILES = VCamUIPatch.m
-VCamUIPatch_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable
+VCamUIPatch_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -Wno-unused-variable -miphoneos-version-min=16.0
 # 本补丁不引用 substrate 符号: 清空默认链接库, 符号运行时动态解析
 VCamUIPatch_LIBRARIES =
-VCamUIPatch_LDFLAGS = -Wl,-undefined,dynamic_lookup
+VCamUIPatch_LDFLAGS = -Wl,-undefined,dynamic_lookup -Wl,-platform_version,ios,16.0,16.0
 
 # 覆盖默认架构 (arm64e 需 Xcode 15 + 匹配 SDK; 仅 arm64 时去掉 arm64e)
 ARCHS = arm64 arm64e

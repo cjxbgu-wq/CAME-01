@@ -43,29 +43,11 @@ static UIColor *VPColorGold(void)   { return [UIColor colorWithRed:1.00 green:0.
 static UIColor *VPColorGlass(void)  { return [UIColor colorWithRed:0.063 green:0.102 blue:0.173 alpha:0.5]; }
 
 // ---------------------------------------------------------------
-// 前向声明: 目标类仅以类别接口声明 (编译期无需其头文件/实现,
-// ObjC 动态派发在运行时解析, 与"补丁方式"约束一致)
+// 说明: 目标类 (VCamSettingsViewController / VCamFloatingBall)
+// 全程以 NSClassFromString + @selector + performSelector + 运行时
+// ivar 访问 (object_getIvar) 操作, 编译期无需任何头文件/类别声明,
+// 与"补丁方式、零源码依赖"约束一致。
 // ---------------------------------------------------------------
-@class VCamSettingsViewController;
-@class VCamFloatingBall;
-
-@interface VCamSettingsViewController (Patch)
-- (void)viewDidLoad;
-- (void)updateStatusLabel;
-- (void)switchVideoTapped;
-- (void)toggleReplacementTapped;
-- (void)restoreCameraTapped;
-- (void)toggleFloatingBallTapped;
-- (void)rtmpSwitchChanged:(id)sender;
-- (void)saveRtmpUrl;
-- (void)openTutorial;
-- (void)dismissPanel;
-- (void)showAlertWithMessage:(NSString *)message;
-@end
-
-@interface VCamFloatingBall (Patch)
-- (instancetype)initWithFrame:(CGRect)frame;
-@end
 
 // ---------------------------------------------------------------
 // VPButton: 带按压反馈的图标按钮 (缩放 + 亮度)
