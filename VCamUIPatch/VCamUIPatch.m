@@ -46,6 +46,9 @@ static UIColor *VPColorGlass(void)  { return [UIColor colorWithRed:0.063 green:0
 // 前向声明: 目标类仅以类别接口声明 (编译期无需其头文件/实现,
 // ObjC 动态派发在运行时解析, 与"补丁方式"约束一致)
 // ---------------------------------------------------------------
+@class VCamSettingsViewController;
+@class VCamFloatingBall;
+
 @interface VCamSettingsViewController (Patch)
 - (void)viewDidLoad;
 - (void)updateStatusLabel;
@@ -317,7 +320,7 @@ static void VPFloatingBallInit(id self, SEL _cmd, CGRect frame) {
     UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectInset(((UIView *)self).bounds, ((UIView *)self).bounds.size.width * 0.14, ((UIView *)self).bounds.size.width * 0.14)];
     iv.tag = VP_TAG_BALLIMG;
     iv.contentMode = UIViewContentModeScaleAspectFit;
-    iv.image = VPBallImageForText(label.text);
+    iv.image = VPBallImageForText(((UILabel *)label).text);
     [(UIView *)self addSubview:iv];
 
     // 呼吸光环 (绿色, 持续透明度脉冲)

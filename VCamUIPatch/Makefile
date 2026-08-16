@@ -14,7 +14,9 @@ VCamUIPatch_LDFLAGS = -Wl,-undefined,dynamic_lookup
 
 # 覆盖默认架构 (arm64e 需 Xcode 15 + 匹配 SDK; 仅 arm64 时去掉 arm64e)
 ARCHS = arm64 arm64e
-TARGET = iphone:clang:16.0:16.0
+TARGET = iphone:clang:latest:16.0
+# 显式部署版本: tweak.mk 可能重置 TARGET, 双保险 (maskedCorners 需 iOS 11+)
+TARGET_IPHONEOS_DEPLOYMENT_VERSION = 16.0
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
