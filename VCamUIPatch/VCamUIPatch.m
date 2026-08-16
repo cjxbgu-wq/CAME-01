@@ -439,7 +439,7 @@ static void VPBuildPanel(UIViewController *vc) {
 
     // --- 舱间光柱 ---
     UIView *beam = [[UIView alloc] initWithFrame:CGRectMake(W / 2 + 19 * K, 172 * K, 6 * K, 118 * K)];
-    beam.layer.cornerRadius = 3 * S;
+    beam.layer.cornerRadius = 3 * K;
     beam.backgroundColor = VPColorGreen();
     beam.alpha = 0.85;
     [root addSubview:beam];
