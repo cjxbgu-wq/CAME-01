@@ -745,6 +745,89 @@ static void VPDismissPanel(id self, SEL _cmd) {
 }
 
 // ---------------------------------------------------------------
+// 手势判定重写 (按钮全部失效的真根因):
+// 反汇编实证 — 真机 shouldReceiveTouch: = 返回
+//   !(touch.view 是 _panelView 的子孙视图)
+// 重建面板把原 _panelView 移出了视图层级 → 该判定对所有重建控件
+// 恒为"在面板外" → 手势接收一切触摸 → 手势动作(关闭面板)在按钮
+// 之前触发并取消按钮点击 → 媒体键/替换/关闭等全部"点不动"。
+// 自含逻辑 (不依赖原实现): 根部(暗区)触摸 → 走关闭面板 (源码行为);
+// 任意子视图(重建控件) → 手势不接收, 按钮正常响应。
+// ---------------------------------------------------------------
+static BOOL VPShouldReceiveTouch(id self, SEL _cmd, UIGestureRecognizer *gr, UITouch *touch) {
+    UIView *v = [touch view];
+    UIView *root = ((UIViewController *)self).view;
+    if (!v || v == root) {
+        [self performSelector:@selector(dismissPanel)]; // 面板外点击关闭 (源码行为)
+        return YES;
+    }
+    return NO;
+}
+
+// ---------------------------------------------------------------
+// 顶层可呈现 VC (v5.0.0 实证可行):
+// 浮动窗口不是有效呈现上下文, 在窗口内 VC 上 present 选择器/弹窗
+// 不会产生可见画面 (v6.1-6.3 用户实测"无弹窗")。
+// 取 v5.0.0 已验证路径: 前台应用 keyWindow 的 rootVC → presented 链末端。
+// ---------------------------------------------------------------
+static UIViewController *VPTopPresentingVC(void) {
+    @try {
+        UIWindow *w = nil;
+        if (@available(iOS 13.0, *)) {
+            for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+                if ([s isKindOfClass:[UIWindowScene class]]) {
+                    for (UIWindow *win in ((UIWindowScene *)s).windows) {
+                        if (win.isKeyWindow) { w = win; break; }
+                    }
+                    if (w) break;
+                }
+            }
+        }
+        if (!w) w = [UIApplication sharedApplication].windows.firstObject;
+        if (!w) return nil;
+        UIViewController *vc = w.rootViewController;
+        while (vc.presentedViewController) vc = vc.presentedViewController;
+        return vc;
+    } @catch (NSException *e) { return nil; }
+}
+
+// ---------------------------------------------------------------
+// 媒体选择器宿主改造 (根本修复):
+// 源码语义不变 (PhotoLibrary + public.image/public.movie + delegate=self),
+// 仅 presenter 从悬浮窗内 VC 改为顶层 VC — 选择器保证可见。
+// 回调仍走源码 imagePickerController:didFinishPickingMediaWithInfo: /
+// imagePickerControllerDidCancel: (delegate = self 原样), 选择逻辑零改动。
+// ---------------------------------------------------------------
+static void VPSwitchVideoTapped(id self, SEL _cmd) {
+    UIImagePickerController *picker = [UIImagePickerController new];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.mediaTypes = @[@"public.image", @"public.movie"];
+    picker.delegate = self;
+    UIViewController *top = VPTopPresentingVC();
+    if (top) {
+        [top presentViewController:picker animated:YES completion:nil];
+    } else {
+        [self presentViewController:picker animated:YES completion:nil]; // 兜底: 源码行为
+    }
+}
+
+// ---------------------------------------------------------------
+// 教程弹窗宿主改造 (同类根因): 内容/按钮与源码一致, 仅呈现宿主
+// ---------------------------------------------------------------
+static void VPShowAlertWithMessage(id self, SEL _cmd, NSString *message) {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"VCam"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    UIViewController *top = VPTopPresentingVC();
+    if (top) {
+        [top presentViewController:alert animated:YES completion:nil];
+    } else {
+        [self presentViewController:alert animated:YES completion:nil]; // 兜底: 源码行为
+    }
+}
+
+// ---------------------------------------------------------------
 // RTMP 镜像处理: 写回原控件后调用原方法 (逻辑零改动)
 // ---------------------------------------------------------------
 static Ivar VPIvar(Class cls, const char *name) {
@@ -810,7 +893,11 @@ static void VPInstallSwizzles(void) {
 
     VPSwizzle(settings, @selector(viewDidLoad), (IMP)VPViewDidLoad, (IMP *)&origViewDidLoad);
     VPSwizzle(settings, @selector(updateStatusLabel), (IMP)VPUpdateStatusLabel, (IMP *)&origUpdateStatusLabel);
-    // 媒体选择器/教程弹窗: 不 swizzle, 完全走源码原逻辑 (自身 present)
+    // 媒体选择器/教程弹窗: present 宿主 = 顶层 VC (v5.0.0 实证), 内容/回调走源码
+    VPSwizzle(settings, @selector(switchVideoTapped), (IMP)VPSwitchVideoTapped, NULL);
+    VPSwizzle(settings, @selector(showAlertWithMessage:), (IMP)VPShowAlertWithMessage, NULL);
+    // 手势判定重写: 重建面板后原 _panelView 脱离层级, 原判定吞掉全部按钮点击
+    VPSwizzle(settings, @selector(gestureRecognizer:shouldReceiveTouch:), (IMP)VPShouldReceiveTouch, NULL);
     VPSwizzle(settings, @selector(dismissPanel), (IMP)VPDismissPanel, (IMP *)&origDismissPanel);
     VPSwizzle(ball, @selector(initWithFrame:), (IMP)VPFloatingBallInit, (IMP *)&origFloatingBallInit);
     VPSwizzle([UILabel class], @selector(setText:), (IMP)VPLabelSetText, (IMP *)&origLabelSetText);
