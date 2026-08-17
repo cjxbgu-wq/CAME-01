@@ -34,6 +34,9 @@ static const NSInteger VP_TAG_BALLLABEL = 0x6B61; // 悬浮球原文本标签(�
 static const NSInteger VP_TAG_BADGE     = 0x6B62; // 右舱状态徽章
 static const NSInteger VP_TAG_BALLIMG   = 0x6B63; // 悬浮球图标视图
 static const NSInteger VP_TAG_BALLRING  = 0x6B64; // 悬浮球呼吸光环
+static const NSInteger VP_TAG_MINISW    = 0x6B65; // 左舱迷你 RTMP 开关
+static const NSInteger VP_TAG_MINITF    = 0x6B66; // 左舱 RTMP 地址输入
+static const NSInteger VP_TAG_RTMPSW    = 0x6B67; // 右舱 RTMP 迷你开关
 
 // 主题色 (方案J 撞色)
 static UIColor *VPColorGreen(void)  { return [UIColor colorWithRed:0.24 green:1.00 blue:0.62 alpha:1]; }
@@ -501,13 +504,14 @@ static void VPBuildPanel(UIViewController *vc) {
 
     // 迷你 RTMP: 开关 + 输入 (镜像到原控件后走原方法)
     UISwitch *miniSw = [[UISwitch alloc] initWithFrame:CGRectMake(14 * K, 216 * K, 51 * K, 31 * K)];
+    miniSw.tag = VP_TAG_MINISW;
     miniSw.onTintColor = VPColorGreen();
     miniSw.transform = CGAffineTransformMakeScale(K, K);
     [miniSw addTarget:vc action:@selector(vpMiniSwitchChanged:) forControlEvents:UIControlEventValueChanged];
     [podL addSubview:miniSw];
 
     UITextField *miniTf = [[UITextField alloc] initWithFrame:CGRectMake(72 * K, 220 * K, 84 * K, 22 * K)];
-    miniTf.tag = VP_TAG_BALLLABEL + 10; // 复用信号区无冲突: 独立标签
+    miniTf.tag = VP_TAG_MINITF;
     miniTf.font = [UIFont systemFontOfSize:8 * K];
     miniTf.textColor = [UIColor colorWithRed:0.81 green:0.88 blue:1 alpha:1];
     miniTf.backgroundColor = [UIColor colorWithRed:0.24 green:0.48 blue:1 alpha:0.15];
@@ -579,6 +583,7 @@ static void VPBuildPanel(UIViewController *vc) {
     rtmpLab.textAlignment = NSTextAlignmentCenter;
     [podR addSubview:rtmpLab];
     UISwitch *rtmpSw = [[UISwitch alloc] initWithFrame:CGRectMake((124 * K - 51 * K) / 2, 148 * K, 51 * K, 31 * K)];
+    rtmpSw.tag = VP_TAG_RTMPSW;
     rtmpSw.onTintColor = VPColorBlue();
     rtmpSw.transform = CGAffineTransformMakeScale(K, K);
     [rtmpSw addTarget:vc action:@selector(vpRtmpSwitchChanged:) forControlEvents:UIControlEventValueChanged];
@@ -625,12 +630,35 @@ static void VPViewDidLoad(id self, SEL _cmd) {
 }
 
 static void (*origUpdateStatusLabel)(id, SEL) = NULL;
+static Ivar VPIvar(Class cls, const char *name); // 前置声明 (VPIvar 定义在后)
 static void VPUpdateStatusLabel(id self, SEL _cmd) {
     origUpdateStatusLabel(self, _cmd);
     // 从原 _statusLabel.text 读取状态 (原逻辑的单一事实来源), 仅同步显示
     Ivar iv = class_getInstanceVariable(object_getClass(self), "_statusLabel");
     UILabel *sl = iv ? object_getIvar(self, iv) : nil;
     if (sl && sl.text) VPSetBadge(((UIViewController *)self).view, sl.text);
+    // RTMP 连续回显: 原开关状态 + 已存地址 → 迷你控件 (外部变更同样跟随)
+    // 仅赋值不触发 valueChanged, 无递归
+    Class cls = object_getClass(self);
+    UIView *root = ((UIViewController *)self).view;
+    Ivar swIv = VPIvar(cls, "_rtmpSwitch");
+    if (swIv) {
+        UISwitch *origSw = object_getIvar(self, swIv);
+        if (origSw) {
+            for (NSInteger t = VP_TAG_MINISW; t <= VP_TAG_RTMPSW; t += 1) {
+                UISwitch *ms = (UISwitch *)[root viewWithTag:t];
+                if ([ms isKindOfClass:[UISwitch class]]) ms.on = origSw.isOn;
+            }
+        }
+    }
+    Ivar tfIv = VPIvar(cls, "_rtmpTextField");
+    if (tfIv) {
+        UITextField *origTf = object_getIvar(self, tfIv);
+        if (origTf.text.length) {
+            UITextField *mt = (UITextField *)[root viewWithTag:VP_TAG_MINITF];
+            if ([mt isKindOfClass:[UITextField class]]) mt.text = origTf.text;
+        }
+    }
     // 同步悬浮球 (替换状态文本含 ON/OFF) — 遍历所有窗口 (球可能在独立悬浮窗)
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
         UIView *iv = [w viewWithTag:VP_TAG_BALLIMG];
