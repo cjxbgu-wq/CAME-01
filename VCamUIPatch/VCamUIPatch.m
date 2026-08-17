@@ -667,43 +667,11 @@ static void VPUpdateStatusLabel(id self, SEL _cmd) {
 }
 
 // ---------------------------------------------------------------
-// 呈现宿主修复: 面板 VC 挂载于自定义悬浮窗 (非窗口控制器层级),
-// iOS 16+ 从其 self 上 present 会被系统丢弃 (view is not in the
-// window hierarchy) → 选择器/弹窗改为从最高层可见窗口的顶层 VC
-// 呈现; 委托/回调仍由面板 VC 处理, 内容与原件完全一致。
+// 媒体选择器/弹窗: 保持源码原逻辑 (面板 VC 自身 present) —
+// 呈现窗自动创建在面板窗上一层, 可见可关, 不会挡在面板后面。
+// 之前改从主窗顶层 VC 代呈现: 呈现窗(level 1)低于面板悬浮窗 →
+// 选择器被面板窗完全盖住, 表现为"打不开" — 已还原。
 // ---------------------------------------------------------------
-static UIViewController *VPTopmostPresentingVC(void) {
-    NSArray *wins = [[UIApplication sharedApplication] windows];
-    NSArray *sorted = [wins sortedArrayUsingComparator:^NSComparisonResult(UIWindow *a, UIWindow *b) {
-        return a.windowLevel > b.windowLevel ? NSOrderedAscending : NSOrderedDescending;
-    }];
-    for (UIWindow *w in sorted) {
-        // 只接受主层级窗口 (level 0): 悬浮窗/状态栏窗一律跳过,
-        // 防止选择器/弹窗落入小窗或非键窗 → 隐形全屏遮挡导致"卡死"
-        if (w.hidden || w.windowLevel != 0) continue;
-        UIViewController *root = w.rootViewController;
-        if (!root) continue;
-        // vcam 自有窗口根 (响应 toggleFloatingBall) 与面板 VC 自身都跳过
-        if ([root isKindOfClass:NSClassFromString(@"VCamSettingsViewController")]) continue;
-        if ([root respondsToSelector:@selector(toggleFloatingBall)]) continue;
-        UIViewController *top = root;
-        while (top.presentedViewController) top = top.presentedViewController;
-        return top;
-    }
-    return nil;
-}
-
-// 切换视频: 与原件同构 (同款选择器/类型/委托), 仅呈现宿主改为顶层 VC
-static void (*origSwitchVideo)(id, SEL) = NULL;
-static void VPSwitchVideo(id self, SEL _cmd) {
-    UIImagePickerController *picker = [UIImagePickerController new];
-    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-    picker.mediaTypes = @[@"public.image", @"public.movie"];
-    picker.delegate = self; // 选片回调仍走面板 VC 的原方法
-    UIViewController *host = VPTopmostPresentingVC();
-    if (host) [host presentViewController:picker animated:YES completion:nil];
-}
-
 // 关闭: 正规 presented 层级 → 原样 dismiss; 否则整窗隐藏 (独立面板窗)
 // 或仅摘面板视图 (悬浮球同窗时, 避免连球一起消失)
 static void (*origDismissPanel)(id, SEL) = NULL;
@@ -726,21 +694,6 @@ static void VPDismissPanel(id self, SEL _cmd) {
         return;
     }
     if (origDismissPanel) origDismissPanel(self, _cmd);
-}
-
-// 弹窗 (教程/提示): 同因修复 — 从顶层 VC 呈现, 标题统一品牌
-static void (*origShowAlert)(id, SEL, NSString *) = NULL;
-static void VPShowAlert(id self, SEL _cmd, NSString *msg) {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"控制终端UI面板"
-                                                                   message:msg
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-    UIViewController *host = VPTopmostPresentingVC();
-    if (host) {
-        [host presentViewController:alert animated:YES completion:nil];
-    } else if (origShowAlert) {
-        origShowAlert(self, _cmd, msg);
-    }
 }
 
 // ---------------------------------------------------------------
@@ -809,8 +762,7 @@ static void VPInstallSwizzles(void) {
 
     VPSwizzle(settings, @selector(viewDidLoad), (IMP)VPViewDidLoad, (IMP *)&origViewDidLoad);
     VPSwizzle(settings, @selector(updateStatusLabel), (IMP)VPUpdateStatusLabel, (IMP *)&origUpdateStatusLabel);
-    VPSwizzle(settings, @selector(showAlertWithMessage:), (IMP)VPShowAlert, (IMP *)&origShowAlert);
-    VPSwizzle(settings, @selector(switchVideoTapped), (IMP)VPSwitchVideo, (IMP *)&origSwitchVideo);
+    // 媒体选择器/教程弹窗: 不 swizzle, 完全走源码原逻辑 (自身 present)
     VPSwizzle(settings, @selector(dismissPanel), (IMP)VPDismissPanel, (IMP *)&origDismissPanel);
     VPSwizzle(ball, @selector(initWithFrame:), (IMP)VPFloatingBallInit, (IMP *)&origFloatingBallInit);
     VPSwizzle([UILabel class], @selector(setText:), (IMP)VPLabelSetText, (IMP *)&origLabelSetText);
