@@ -25,6 +25,9 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
+#import <mach-o/dyld.h>
+#import <mach-o/loader.h>
+#import <string.h>
 
 // ---------------------------------------------------------------
 // 标签常量: 全局 UILabel setText: 交换仅对本补丁创建的标签生效
@@ -405,6 +408,51 @@ static BOOL VPOpenURLLegacy(id self, SEL _cmd, NSURL *url) {
 }
 
 // ---------------------------------------------------------------
+// 原版门控解除 (选择视频打不开的真根因):
+// 反汇编实证 — 真实二进制 switchVideoTapped 开头调用防护检查函数
+// (0x1a644): 首次调用触发初始化 (检查进程环境变量, JB/调试环境命中
+// 即置位), 之后直接读全局字节 __DATA+0x33bd5:
+//   0x33bd4 = 初始化完成标志 (置1后防护不再重跑)
+//   0x33bd5 = 门控字节 (bit0=1 → switchVideoTapped 直接 return,
+//             选择器永不创建; 同一门控还守卫 toggleReplacementTapped
+//             等 4 个方法)
+// 用户设备 (RootHide JB) 环境命中防护 → 门控被置 1 → "选择视频打不开"。
+// 修复方式: 定位 vcamv3 镜像运行时基址, 强制 0x33bd4=1 + 0x33bd5=0 —
+// 原方法逻辑零改动, 完整走源码路径 (自身 present, 选择器落在面板窗
+// 上一层, 可见可关)。
+// ---------------------------------------------------------------
+static uintptr_t VPVcamImageBase(void) {
+    for (uint32_t i = 0; i < _dyld_image_count(); i++) {
+        const char *name = _dyld_get_image_name(i);
+        if (!name || !strstr(name, "vcamv3")) continue; // 只找目标 dylib
+        uintptr_t base = (uintptr_t)_dyld_get_image_header(i);
+        struct mach_header_64 *h = (struct mach_header_64 *)base;
+        if (h->magic != MH_MAGIC_64) continue;
+        // 校验该镜像存在覆盖 0x33bd4 的段 (防止误中同名宿主二进制,
+        // 避免把宿主进程数据写坏)
+        uintptr_t p = base + sizeof(struct mach_header_64);
+        for (uint32_t j = 0; j < h->ncmds; j++) {
+            struct segment_command_64 *seg = (struct segment_command_64 *)p;
+            if (seg->cmd == LC_SEGMENT_64 &&
+                seg->vmaddr <= 0x33bd4 && 0x33bd4 < seg->vmaddr + seg->vmsize) {
+                return base;
+            }
+            p += seg->cmdsize;
+        }
+    }
+    return 0;
+}
+
+static void VPPatchVcamGate(void) {
+    uintptr_t base = VPVcamImageBase();
+    if (!base) return; // 镜像未就绪, 由重试调度补跑
+    uint8_t *flags = (uint8_t *)base;
+    // __DATA 段 fileoff==vmaddr (已实证), 运行时地址 = 基址 + 偏移
+    flags[0x33bd4] = 1; // 初始化完成: 防护不再重跑, 门控不被覆盖
+    flags[0x33bd5] = 0; // 门控打开: 选择器/替换开关等恢复源码行为
+}
+
+// ---------------------------------------------------------------
 // 状态徽章同步 (右舱眼瞳下方)
 // ---------------------------------------------------------------
 static void VPSetBadge(UIView *root, NSString *stateText) {
@@ -781,12 +829,16 @@ static void VPInstallSwizzles(void) {
 // dylib 构造: 立即尝试 + 0.5/2/5s 重试 (覆盖类加载顺序差异)
 __attribute__((constructor))
 static void VPPatchInit(void) {
+    VPPatchVcamGate(); // 门控解除: 独立于类加载, 先执行再装 swizzle
     VPInstallSwizzles();
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        VPPatchVcamGate();
         VPInstallSwizzles();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            VPPatchVcamGate();
             VPInstallSwizzles();
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                VPPatchVcamGate();
                 VPInstallSwizzles();
             });
         });
